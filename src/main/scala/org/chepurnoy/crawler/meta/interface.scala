@@ -2,8 +2,8 @@ package org.chepurnoy.crawler.meta
 
 import akka.actor.ActorSystem
 import scala.concurrent.duration._
-import scala.concurrent.Future
 import org.chepurnoy.crawler.meta.implementation.{StartCrawl, BatchWorker}
+import play.api.libs.iteratee.Enumerator
 
 //task level
 
@@ -42,13 +42,16 @@ trait Task[FetchingTask <: AbstractFetchingTask[_],
   val politeness: Short = 0 //pause in millis between requests
 
   val fetchingParallel = 10 //how many pages to fetch simultaneously
-  val processParallel = 2 //todo: implement how many pages to process simultaneously
+  val processParallel = 2 //how many pages to process simultaneously
 
   val maxDepth = 3 //max depth from seed URL to be reached
   val maxNodes = Long.MaxValue //max pages to fetch for a task
-  val timeout = 10 minutes //todo:implement ??
 
-  def seedTask: FetchingTask
+  val revisitAllowed = false
+
+  val timeout = 1 minute //time from the last seed has been submitted
+  def seeds: Enumerator[FetchingTask]
+
   def fetch(task: FetchingTask): Option[RawResult]
   def process(r: RawResult, fetchingTask:FetchingTask):ProcessingResult
   def buildTaskResult(results: List[PartialTaskResult]): TaskResult

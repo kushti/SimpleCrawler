@@ -2,11 +2,12 @@ package org.chepurnoy.crawler.examples
 
 import org.chepurnoy.crawler.meta._
 import com.github.theon.uri.Uri
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Promise, ExecutionContext, Future}
 import org.jsoup.nodes.Document
 import org.jsoup.Jsoup
 import ExecutionContext.Implicits.global
 import scala.collection.JavaConversions._
+import play.api.libs.iteratee.Enumerator
 
 
 class Url(url:String) extends AbstractAddress{
@@ -27,9 +28,7 @@ abstract class JsoupTask[PartialTaskResult <: AbstractPartialTaskResult[Url],
                          TaskResult <: AbstractTaskResult](seedUrl:String)
   extends Task[HttpFetchingTask, Document, PartialTaskResult, ProcessingResult,TaskResult]{
 
-  override val maxNodes = 50l
-
-  def seedTask = new HttpFetchingTask(seedUrl, 0, None)
+  def seeds = Enumerator(new HttpFetchingTask(seedUrl, 0, None))
   def fetch(task: HttpFetchingTask): Option[Document] = Option(Jsoup.connect(task.address.get).get())
 }
 
@@ -43,7 +42,11 @@ class ExampleProcessingResult(override val partialTaskResult:ExamplePartialTaskR
 
 class ExampleTaskResult extends AbstractTaskResult
 
-class JsoupExampleTask(seedUrl:String) extends JsoupTask[ExamplePartialTaskResult,ExampleProcessingResult,ExampleTaskResult](seedUrl){
+case class JsoupExampleTask(seedUrl:String) extends JsoupTask[ExamplePartialTaskResult,ExampleProcessingResult,ExampleTaskResult](seedUrl){
+  override val maxNodes = 500l
+  override val revisitAllowed = true
+  override val maxDepth = 0
+
   def process(doc: Document, fetchingTask: HttpFetchingTask) = {
     println(s"Processing: ${fetchingTask.address} ${doc.text()}")
     val outLinks = doc.select("a[href]").
@@ -64,7 +67,12 @@ class JsoupExampleTask(seedUrl:String) extends JsoupTask[ExamplePartialTaskResul
 
 
 object MetaExampleCrawler extends Crawler with App{
-  val tasks = List(new JsoupExampleTask("http://en.wordpress.com/fresh/"))
+  val tasks = List(new JsoupExampleTask("http://en.wordpress.com/fresh/"){
+    override def seeds = Enumerator.generateM{
+      Thread.sleep(5000)
+      Future(Some(new HttpFetchingTask(seedUrl,0, None)))
+    }
+  })
 
   val crawlerSettings = new CrawlerSettings(new CrawlerHooks() {
     def processBatchResult(results: List[_ <: AbstractTaskResult]): Unit = {
